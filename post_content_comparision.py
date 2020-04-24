@@ -1,5 +1,6 @@
 import requests
 import json
+import hashlib
 
 url = "http://127.0.0.1:3005/api/v1/real-estate-extraction"
 
@@ -34,30 +35,24 @@ def get_from_api(post_content):
                     json_response[0]["tags"]
                 ))
         ):
-            if content["type"] == "addr_street" and data_attrs["attr_addr_street"] == "":
-                data_attrs["attr_addr_street"] = content["content"]
+            if content["type"] == "addr_street":
+                data_attrs["attr_addr_street"] += content["content"] + ", "
 
-            elif content['type'] == "addr_ward" and data_attrs["attr_addr_ward"] == "":
-                data_attrs["attr_addr_ward"] = content["content"]
+            elif content['type'] == "addr_ward":
+                data_attrs["attr_addr_ward"] += content["content"] + ", "
 
-            elif content['type'] == "addr_district" and data_attrs["attr_addr_district"] == "":
-                data_attrs["attr_addr_district"] = content["content"]
+            elif content['type'] == "addr_district":
+                data_attrs["attr_addr_district"] += content["content"] + ", "
 
-            elif content['type'] == "addr_city" and data_attrs["attr_addr_city"] == "":
-                data_attrs["attr_addr_city"] = content["content"]
+            elif content['type'] == "addr_city":
+                data_attrs["attr_addr_city"] += content["content"] + ", "
 
             elif content['type'] == "surrounding":
-                if data_attrs["attr_surrounding_name"] == "":
-                    data_attrs["attr_surrounding_name"] = content["content"]
-                else:
-                    data_attrs["attr_surrounding_name"] = data_attrs["attr_surrounding_name"] + " " + content["content"]
+                data_attrs["attr_surrounding_name"] += content["content"] + ", "
 
             elif content["type"] == "surrounding_characteristics":
-                if data_attrs["attr_surrounding_characteristics"] == "":
-                    data_attrs["attr_surrounding_characteristics"] = content["content"]
-                else:
-                    data_attrs["attr_surrounding_characteristics"] = \
-                        data_attrs['attr_surrounding_characteristics'] + " " + content["content"]
+                data_attrs['attr_surrounding_characteristics'] += content["content"] + ", "
+
     except:
         pass
     return data_attrs
@@ -77,52 +72,42 @@ def remove_accents(input_str):
     return s
 
 
-# Compare 2 features regardless of accents and higher letters
-# if different return 1, otherwise return 0
-def compare_features(feature1, feature2):
-    new_feature1 = remove_accents(feature1).lower()
-    new_feature2 = remove_accents(feature2).lower()
-    bagOfWord1 = set(new_feature1.split(' '))
-    bagOfWord2 = set(new_feature2.split(' '))
-    if bagOfWord1 != bagOfWord2:
-        return 1
-    return 0
+def requestToString(data):
+    stringRequest = ""
+    for feature in data:
+        new_feature = remove_accents(data[feature]).lower()
+        bagOfWord = set(new_feature.split(', '))
+        bagOfWord.discard('')
+
+        new_bagOfWord = sorted(bagOfWord)
+        # print(new_bagOfWord)
+
+        for word in new_bagOfWord:
+            stringRequest += word + " "
+
+    return stringRequest
 
 
-# print(compare_features("Hoàng Hoa Thám", "hoàng hoa thám"))
+def hashMap(string):
+    string = string.replace(" ", "")
+    return hashlib.md5(string.encode('utf-8')).hexdigest()
 
 
 with open('data.json', 'rb') as json_data:
     data_set = json.loads(json_data.read())
-    print(len(data_set), "datas loaded succesfully")
-    for data_i in data_set:
-        for data_j in data_set:
-            if data_j["id"] > data_i["id"]:
-                data1 = get_from_api(data_i["content"])
-                data2 = get_from_api(data_j["content"])
-                check = 0
-                for feature in data1:
-                    check += compare_features(data1[feature], data2[feature])
-                    if check == 1:
-                        break
-                if check == 0:
-                    print("Two posts:", data_i["id"], "and", data_j["id"], "are identical.")
-                else:
-                    print("Two posts:", data_i["id"], "and", data_j["id"], "are different.")
+    print(len(data_set), "data loaded successfully")
 
-#   Test case:
-#   text1 = "Em cần nhượng phòng gấpĐịa chỉ: 242Hoàng Hoa Thám,p5, Q. Bình Thạnh. Phòng e ở được từ 2-3 người. Phòng có giá 2tr5, có nhà vệ sinh riêng, nước 50k/người, điện 3,5k/kwh. Sát chợ nên rất nhộn nhịp, ăn uống thoải mái, gần hồ về đêm rất yên tĩnh. Sdt 0944296412 "
-#   text2 = "Vì đang kẹt tiền nên em có một căn nhà ở hoàng hoa thám ,p5, quận bình thạnh cần bán gấp. Phòng giá 5 triệu. Gần hồ và chợ nên rất yên tĩnh, nhộn nhịp . Liên hệ: 0944296412 "
-#   data1 = get_from_api(text1)
-#   data2 = get_from_api(text2)
-#   print(data1)
-#   print(data2)
-#   check = 0
-#   for feature in data1:
-#       check += compare_features(data1[feature], data2[feature])
-#       if check == 1:
-#           break
-#   if check == 0:
-#       print("Two posts are identical.")
-#   else:
-#       print("Two posts are different.")
+    requestDict = {}
+    for data in data_set:
+        content = get_from_api(data["content"])
+        # print(content)
+        request = requestToString(content)
+        key = hashMap(request)
+
+        if not requestDict.get(key):  ## O(1)
+            requestDict[key] = data['id']
+        else:
+            print("Two posts:", data['id'], "and", requestDict.get(key), "are identical.")
+
+    print(requestDict)
+
